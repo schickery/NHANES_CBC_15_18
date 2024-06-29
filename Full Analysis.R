@@ -35,3 +35,8 @@ HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBDHCI")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HEPC_I.XPT", tf <- tempfile(), mode="wb")
 HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBDHCI")]
 
+#Blood Donation (Exclude Past 12 weeks donators)
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HSQ_I.XPT", tf <- tempfile(), mode="wb")
+HSQ_I <- foreign::read.xport(tf)[,c("SEQN", "HSQ571", "HSQ580")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/HSQ_J.XPT", tf <- tempfile(), mode="wb")
+HSQ_J <- foreign::read.xport(tf)[,c("SEQN", "HSQ571", "HSQ580")]
