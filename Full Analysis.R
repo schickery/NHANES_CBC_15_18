@@ -52,3 +52,9 @@ download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/SMQ_I.XPT", tf <- temp
 SMQ_I <- foreign::read.xport(tf)[,c("SEQN", "SMQ040")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/SMQ_J.XPT", tf <- tempfile(), mode="wb")
 SMQ_J <- foreign::read.xport(tf)[,c("SEQN", "SMQ040")]
+
+#A1C
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/GHB_I.XPT", tf <- tempfile(), mode="wb")
+GHB_I <- foreign::read.xport(tf)[,c("SEQN", "LBXGH")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/GHB_J.XPT", tf <- tempfile(), mode="wb")
+GHB_J <- foreign::read.xport(tf)[,c("SEQN", "LBXGH")]
