@@ -40,3 +40,9 @@ download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HSQ_I.XPT", tf <- temp
 HSQ_I <- foreign::read.xport(tf)[,c("SEQN", "HSQ571", "HSQ580")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/HSQ_J.XPT", tf <- tempfile(), mode="wb")
 HSQ_J <- foreign::read.xport(tf)[,c("SEQN", "HSQ571", "HSQ580")]
+
+#Alcohol Use
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/ALQ_I.XPT", tf <- tempfile(), mode="wb")
+ALQ_I <- foreign::read.xport(tf)[,c("SEQN", "ALQ141Q", "ALQ141U")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/ALQ_J.XPT", tf <- tempfile(), mode="wb")
+ALQ_J <- foreign::read.xport(tf)[,c("SEQN", "ALQ142")]
