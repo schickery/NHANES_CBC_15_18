@@ -46,3 +46,9 @@ download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/ALQ_I.XPT", tf <- temp
 ALQ_I <- foreign::read.xport(tf)[,c("SEQN", "ALQ141Q", "ALQ141U")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/ALQ_J.XPT", tf <- tempfile(), mode="wb")
 ALQ_J <- foreign::read.xport(tf)[,c("SEQN", "ALQ142")]
+
+#Smoking
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/SMQ_I.XPT", tf <- tempfile(), mode="wb")
+SMQ_I <- foreign::read.xport(tf)[,c("SEQN", "SMQ040")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/SMQ_J.XPT", tf <- tempfile(), mode="wb")
+SMQ_J <- foreign::read.xport(tf)[,c("SEQN", "SMQ040")]
