@@ -35,11 +35,11 @@ HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBDHCI")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HEPC_I.XPT", tf <- tempfile(), mode="wb")
 HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBDHCI")]
 
-#Blood Donation (Exclude Past 12 weeks donators)
+#Blood Donation & Illness (Exclude Past 12 weeks donators)
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HSQ_I.XPT", tf <- tempfile(), mode="wb")
-HSQ_I <- foreign::read.xport(tf)[,c("SEQN", "HSQ571", "HSQ580")]
+HSQ_I <- foreign::read.xport(tf)[,c("SEQN", "HSQ500", "HSQ510", "HSQ520","HSQ571", "HSQ580")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/HSQ_J.XPT", tf <- tempfile(), mode="wb")
-HSQ_J <- foreign::read.xport(tf)[,c("SEQN", "HSQ571", "HSQ580")]
+HSQ_J <- foreign::read.xport(tf)[,c("SEQN", "HSQ500", "HSQ510", "HSQ520","HSQ571", "HSQ580")]
 
 #Alcohol Use
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/ALQ_I.XPT", tf <- tempfile(), mode="wb")
