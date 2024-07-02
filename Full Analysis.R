@@ -77,3 +77,36 @@ ALQ <- bind_rows(ALQ_I, ALQ_J)
 SMQ <- bind_rows(SMQ_I, SMQ_J)
 GHB <- bind_rows(GHB_I, GHB_J)
 RHQ <- bind_rows(RHQ_I, RHQ_J)
+
+#------------------------------------------
+#Determine number of SEQNs before exclusions
+
+install.packages("purrr")
+library(purrr)
+
+# Combine all datasets into one dataframe (assuming SEQN is the unique identifier across all datasets)
+combined_data <- reduce(list(DEMO, CBC, BIOPRO, HEPBD, HEPC, HSQ, ALQ, SMQ, GHB, RHQ), full_join, by = "SEQN")
+
+# Count the number of unique SEQN values
+unique_seqn_count <- n_distinct(combined_data$SEQN)
+print(paste("Number of unique SEQN in the combined dataset:", unique_seqn_count))
+
+# Decoding gender and race if necessary
+DEMO <- DEMO %>%
+  mutate(
+    gender = recode(RIAGENDR, `1` = "Male", `2` = "Female"),
+    race = recode(RIDRETH3,
+                  `1` = "Mexican American",
+                  `2` = "Other Hispanic",
+                  `3` = "Non-Hispanic White",
+                  `4` = "Non-Hispanic Black",
+                  `6` = "Non-Hispanic Asian",
+                  `7` = "Other Race - Including Multi-Racial")
+  )
+
+# Summarizing counts by gender and race
+gender_race_counts <- DEMO %>%
+  group_by(gender, race) %>%
+  summarise(count = n(), .groups = 'drop')
+
+print(gender_race_counts)
