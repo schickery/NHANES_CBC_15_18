@@ -6,10 +6,11 @@ library(ggplot2)
 
 #Install Files from NHANES Database
 #Demographics files
-download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/DEMO_J.XPT", tf <- tempfile(), mode="wb")
-DEMO_J <- foreign::read.xport(tf)[,c("SEQN","RIAGENDR","RIDAGEYR","RIDEXPRG", "RIDRETH3", "SDMVSTRA","SDMVPSU","WTMEC2YR")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/DEMO_I.XPT", tf <- tempfile(), mode="wb")
 DEMO_I <- foreign::read.xport(tf)[,c("SEQN","RIAGENDR","RIDAGEYR","RIDEXPRG", "RIDRETH3", "SDMVSTRA","SDMVPSU","WTMEC2YR")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/DEMO_J.XPT", tf <- tempfile(), mode="wb")
+DEMO_J <- foreign::read.xport(tf)[,c("SEQN","RIAGENDR","RIDAGEYR","RIDEXPRG", "RIDRETH3", "SDMVSTRA","SDMVPSU","WTMEC2YR")]
+
 
 #CBC Data (CBC)
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/CBC_I.XPT", tf <- tempfile(), mode="wb")
@@ -33,7 +34,7 @@ HEPBD_J <- foreign::read.xport(tf)[,c("SEQN", "LBXHBC", "LBDHBG")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/HEPC_J.XPT", tf <- tempfile(), mode="wb")
 HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBDHCI")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HEPC_I.XPT", tf <- tempfile(), mode="wb")
-HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBDHCI")]
+HEPC_I <- foreign::read.xport(tf)[,c("SEQN", "LBXHCR")]
 
 #Blood Donation & Illness (Exclude Past 12 weeks donators)
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HSQ_I.XPT", tf <- tempfile(), mode="wb")
@@ -58,3 +59,21 @@ download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/GHB_I.XPT", tf <- temp
 GHB_I <- foreign::read.xport(tf)[,c("SEQN", "LBXGH")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/GHB_J.XPT", tf <- tempfile(), mode="wb")
 GHB_J <- foreign::read.xport(tf)[,c("SEQN", "LBXGH")]
+
+#Pregnancy and Breast Feeding
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/RHQ_I.XPT", tf <- tempfile(), mode="wb")
+RHQ_I <- foreign::read.xport(tf)[,c("SEQN", "RHD143", "RHQ200")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/RHQ_J.XPT", tf <- tempfile(), mode="wb")
+RHQ_J <- foreign::read.xport(tf)[,c("SEQN", "RHD143", "RHQ200")]
+
+#Append Files
+DEMO <- bind_rows(DEMO_I, DEMO_J)
+CBC <- bind_rows(CBC_I, CBC_J)
+BIOPRO <- bind_rows(BIOPRO_I, BIOPRO_J)
+HEPBD <- bind_rows(HEPBD_I, HEPBD_J)
+HEPC <- bind_rows(HEPC_I, HEPC_J)
+HSQ <- bind_rows(HSQ_I, HSQ_J)
+ALQ <- bind_rows(ALQ_I, ALQ_J)
+SMQ <- bind_rows(SMQ_I, SMQ_J)
+GHB <- bind_rows(GHB_I, GHB_J)
+RHQ <- bind_rows(RHQ_I, RHQ_J)
