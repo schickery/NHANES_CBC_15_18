@@ -110,3 +110,40 @@ gender_race_counts <- DEMO %>%
   summarise(count = n(), .groups = 'drop')
 
 print(gender_race_counts)
+
+#Create a Table for m/F by Race-----------------------------------
+install.packages("tidyr")
+install.packages("gridExtra")
+install.packages("grid")
+library(tidyr)
+library(gridExtra)
+library(grid)
+
+# Summarizing counts by gender and race
+gender_race_counts <- DEMO %>%
+  group_by(gender, race) %>%
+  summarise(count = n(), .groups = 'drop')
+
+# Pivoting the data to wide format
+gender_race_table <- gender_race_counts %>%
+  pivot_wider(names_from = race, values_from = count, values_fill = list(count = 0))
+
+print(gender_race_table)
+
+# Convert the table to a format suitable for ggplot2
+gender_race_table_long <- gender_race_table %>%
+  pivot_longer(-gender, names_to = "race", values_to = "count")
+
+# Create a table plot using ggplot2
+table_plot <- ggplot(gender_race_table_long, aes(x = race, y = gender)) +
+  geom_tile(aes(fill = count), color = "white") +
+  geom_text(aes(label = count), color = "black") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal() +
+  labs(title = "Number of Males and Females by Race",
+       fill = "Count",
+       x = "Race",
+       y = "Gender")
+
+# Save the table plot as a PDF
+ggsave("gender_race_table.pdf", plot = table_plot, width = 10, height = 6)
