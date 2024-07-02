@@ -37,7 +37,7 @@ HEPBD_J <- foreign::read.xport(tf)[,c("SEQN", "LBXHBC", "LBDHBG")]
 
 #HEP C Confirmed Data
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/HEPC_J.XPT", tf <- tempfile(), mode="wb")
-HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBDHCI")]
+HEPC_J <- foreign::read.xport(tf)[,c("SEQN", "LBXHCR")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HEPC_I.XPT", tf <- tempfile(), mode="wb")
 HEPC_I <- foreign::read.xport(tf)[,c("SEQN", "LBXHCR")]
 
@@ -112,42 +112,125 @@ nhanes_design <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4Y
 unique_seqn_count <- n_distinct(combined_data$SEQN)
 print(paste("Number of unique SEQN in the combined dataset:", unique_seqn_count))
 
-# Summarizing counts by gender and race using the survey design
-gender_race_weighted_counts <- svytable(~RIAGENDR + RIDRETH3, nhanes_design)
+summarize_counts <- function(data, design, file_name) {
+  # Summarizing counts by gender and race using the survey design
+  gender_race_weighted_counts <- svytable(~RIAGENDR + RIDRETH3, design)
+  
+  # Convert to a data frame
+  gender_race_weighted_df <- as.data.frame(gender_race_weighted_counts)
+  colnames(gender_race_weighted_df) <- c("gender", "race", "count")
+  
+  # Decode gender and race
+  gender_race_weighted_df <- gender_race_weighted_df %>%
+    mutate(
+      gender = recode(gender, `1` = "Male", `2` = "Female"),
+      race = recode(race,
+                    `1` = "Mexican American",
+                    `2` = "Other Hispanic",
+                    `3` = "Non-Hispanic White",
+                    `4` = "Non-Hispanic Black",
+                    `6` = "Non-Hispanic Asian",
+                    `7` = "Other Race - Including Multi-Racial")
+    )
+  
+  # Pivot the data to wide format
+  gender_race_table <- gender_race_weighted_df %>%
+    pivot_wider(names_from = race, values_from = count, values_fill = list(count = 0))
+  
+  # Print the table
+  print(gender_race_table)
+  
+  # Create a table grob
+  table_grob <- tableGrob(gender_race_table)
+  
+  # Adjust column widths
+  col_widths <- unit(rep(1, ncol(table_grob)), "npc") / ncol(table_grob)
+  table_grob$widths <- col_widths
+  
+  # Save the table grob as a PDF with adjusted page size
+  pdf(file_name, width = 12, height = 6)  # Adjust width and height as needed
+  grid.draw(table_grob)
+  dev.off()
+}
 
-# Convert to a data frame
-gender_race_weighted_df <- as.data.frame(gender_race_weighted_counts)
-colnames(gender_race_weighted_df) <- c("gender", "race", "count")
+# Initial summary without exclusions
+summarize_counts(combined_data, nhanes_design, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/NHANES_CBC_15_18/initial_summary.pdf")
+
+# Apply exclusion criteria: A1C >= 6.5%--------------------------------------------------------------------------------------
+combined_data_excluded_a1c <- combined_data %>%
+  filter(LBXGH < 6.5 | is.na(LBXGH))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_a1c <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_a1c, nhanes_design_excluded_a1c, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion.pdf")
+
+# Apply exclusion criteria: Serum creatinine > 2.5 mg/dL--------------------------------------------------
+combined_data_excluded_creatinine <- combined_data_excluded_a1c %>%
+  filter(LBXSCR < 2.5 | is.na(LBXSCR))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_creatinine <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_creatinine, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_creatinine, nhanes_design_excluded_creatinine, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_creatinine.pdf")
+
+# Apply exclusion criteria: Hepatitis C positivity (LBXHCR == 1)--------------------------------------------------------
+combined_data_excluded_hepc <- combined_data_excluded_creatinine %>%
+  filter(LBXHCR != 1 | is.na(LBXHCR))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_hepc <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_hepc, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_hepc, nhanes_design_excluded_hepc, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_hepc.pdf")
+
+# Apply exclusion criteria: Hepatitis B surface antigen (LBDHBG == 1) or core antibody (LBXHBC == 1)---------------------------------
+combined_data_excluded_hepb <- combined_data_excluded_hepc %>%
+  filter((LBDHBG != 1 | is.na(LBDHBG)) & (LBXHBC != 1 | is.na(LBXHBC)))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_hepb <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_hepb, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_hepb, nhanes_design_excluded_hepb, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_hepb.pdf")
+
+# Apply exclusion criteria: Blood donation in the past 12 weeks (HSQ580 == 1, 2, or 3)
+combined_data_excluded_blood_donation <- combined_data_excluded_hepb %>%
+  filter(!(HSQ580 %in% c(1, 2, 3)))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_blood_donation <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_blood_donation, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_blood_donation, nhanes_design_excluded_blood_donation, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_blood_donation.pdf")
+
+# Apply exclusion criteria for 2015-2016 data: ALQ141Q >= 54----------------------------------------------
+combined_data_excluded_alcohol_2015_2016 <- combined_data_excluded_blood_donation %>%
+  filter((is.na(ALQ141Q) | ALQ141Q < 54))
+
+# Apply exclusion criteria for 2017-2018 data: ALQ142 in 1, 2, 3, or 4
+combined_data_excluded_alcohol <- combined_data_excluded_alcohol_2015_2016 %>%
+  filter(!(ALQ142 %in% c(1, 2, 3, 4)))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_alcohol <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_alcohol, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_alcohol, nhanes_design_excluded_alcohol, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_alcohol.pdf")
+
+# Apply exclusion criteria: Pregnancy (RHD143 == 1) and Breastfeeding (RHQ200 == 1) for females
+combined_data_excluded_pregnancy_breastfeeding <- combined_data_excluded_alcohol %>%
+  filter(!(RIAGENDR == 2 & (RHD143 == 1 | RHQ200 == 1)))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_pregnancy_breastfeeding <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_pregnancy_breastfeeding, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_pregnancy_breastfeeding, nhanes_design_excluded_pregnancy_breastfeeding, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_pregnancy_breastfeeding.pdf")
 
 
-# Decode gender and race
-gender_race_weighted_df <- gender_race_weighted_df %>%
-  mutate(
-    gender = recode(gender, `1` = "Male", `2` = "Female"),
-    race = recode(race,
-                  `1` = "Mexican American",
-                  `2` = "Other Hispanic",
-                  `3` = "Non-Hispanic White",
-                  `4` = "Non-Hispanic Black",
-                  `6` = "Non-Hispanic Asian",
-                  `7` = "Other Race - Including Multi-Racial")
-  )
 
-# Pivot the data to wide format
-gender_race_table <- gender_race_weighted_df %>%
-  pivot_wider(names_from = race, values_from = count, values_fill = list(count = 0))
 
-# Print the table
-print(gender_race_table)
 
-# Create a table grob
-table_grob <- tableGrob(gender_race_table)
-
-# Adjust column widths
-col_widths <- unit(rep(1, ncol(table_grob)), "npc") / ncol(table_grob)
-table_grob$widths <- col_widths
-
-# Save the table grob as a PDF with adjusted page size
-pdf("/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/NHANES_CBC_15_18/gender_race_table_weighted.pdf", width = 12, height = 6)  # Adjust width and height as needed
-grid.draw(table_grob)
-dev.off()
