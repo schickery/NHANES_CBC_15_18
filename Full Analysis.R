@@ -1,8 +1,13 @@
+install.packages("dplyr")
+install.packages("tidyr")
 install.packages("survey")
-library(survey)
-library(dplyr)
 install.packages("ggplot2")
+install.packages("gridExtra")
+library(dplyr)
+library(tidyr)
+library(survey)
 library(ggplot2)
+library(gridExtra)
 
 #Install Files from NHANES Database
 #Demographics files
@@ -84,18 +89,42 @@ RHQ <- bind_rows(RHQ_I, RHQ_J)
 install.packages("purrr")
 library(purrr)
 
-# Combine all datasets into one dataframe (assuming SEQN is the unique identifier across all datasets)
+# Adjust weights for 4 years of data
+DEMO <- DEMO %>%
+  mutate(WTMEC4YR = WTMEC2YR / 2)
+
+# Combine all datasets into one dataframe
 combined_data <- reduce(list(DEMO, CBC, BIOPRO, HEPBD, HEPC, HSQ, ALQ, SMQ, GHB, RHQ), full_join, by = "SEQN")
+
+# Check that the necessary columns exist
+required_columns <- c("SEQN", "SDMVPSU", "SDMVSTRA", "WTMEC4YR")
+missing_columns <- setdiff(required_columns, colnames(combined_data))
+
+if(length(missing_columns) > 0) {
+  stop(paste("Missing columns:", paste(missing_columns, collapse = ", ")))
+}
+
+# Create a survey design object using the combined data
+nhanes_design <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data, nest = TRUE)
+
 
 # Count the number of unique SEQN values
 unique_seqn_count <- n_distinct(combined_data$SEQN)
 print(paste("Number of unique SEQN in the combined dataset:", unique_seqn_count))
 
-# Decoding gender and race if necessary
-DEMO <- DEMO %>%
+# Summarizing counts by gender and race using the survey design
+gender_race_weighted_counts <- svytable(~RIAGENDR + RIDRETH3, nhanes_design)
+
+# Convert to a data frame
+gender_race_weighted_df <- as.data.frame(gender_race_weighted_counts)
+colnames(gender_race_weighted_df) <- c("gender", "race", "count")
+
+
+# Decode gender and race
+gender_race_weighted_df <- gender_race_weighted_df %>%
   mutate(
-    gender = recode(RIAGENDR, `1` = "Male", `2` = "Female"),
-    race = recode(RIDRETH3,
+    gender = recode(gender, `1` = "Male", `2` = "Female"),
+    race = recode(race,
                   `1` = "Mexican American",
                   `2` = "Other Hispanic",
                   `3` = "Non-Hispanic White",
@@ -104,46 +133,21 @@ DEMO <- DEMO %>%
                   `7` = "Other Race - Including Multi-Racial")
   )
 
-# Summarizing counts by gender and race
-gender_race_counts <- DEMO %>%
-  group_by(gender, race) %>%
-  summarise(count = n(), .groups = 'drop')
-
-print(gender_race_counts)
-
-#Create a Table for m/F by Race-----------------------------------
-install.packages("tidyr")
-install.packages("gridExtra")
-install.packages("grid")
-library(tidyr)
-library(gridExtra)
-library(grid)
-
-# Summarizing counts by gender and race
-gender_race_counts <- DEMO %>%
-  group_by(gender, race) %>%
-  summarise(count = n(), .groups = 'drop')
-
-# Pivoting the data to wide format
-gender_race_table <- gender_race_counts %>%
+# Pivot the data to wide format
+gender_race_table <- gender_race_weighted_df %>%
   pivot_wider(names_from = race, values_from = count, values_fill = list(count = 0))
 
+# Print the table
 print(gender_race_table)
 
-# Convert the table to a format suitable for ggplot2
-gender_race_table_long <- gender_race_table %>%
-  pivot_longer(-gender, names_to = "race", values_to = "count")
+# Create a table grob
+table_grob <- tableGrob(gender_race_table)
 
-# Create a table plot using ggplot2
-table_plot <- ggplot(gender_race_table_long, aes(x = race, y = gender)) +
-  geom_tile(aes(fill = count), color = "white") +
-  geom_text(aes(label = count), color = "black") +
-  scale_fill_gradient(low = "white", high = "blue") +
-  theme_minimal() +
-  labs(title = "Number of Males and Females by Race",
-       fill = "Count",
-       x = "Race",
-       y = "Gender")
+# Adjust column widths
+col_widths <- unit(rep(1, ncol(table_grob)), "npc") / ncol(table_grob)
+table_grob$widths <- col_widths
 
-# Save the table plot as a PDF
-ggsave("gender_race_table.pdf", plot = table_plot, width = 10, height = 6)
+# Save the table grob as a PDF with adjusted page size
+pdf("/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/NHANES_CBC_15_18/gender_race_table_weighted.pdf", width = 12, height = 6)  # Adjust width and height as needed
+grid.draw(table_grob)
+dev.off()
