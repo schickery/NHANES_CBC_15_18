@@ -65,11 +65,23 @@ GHB_I <- foreign::read.xport(tf)[,c("SEQN", "LBXGH")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/GHB_J.XPT", tf <- tempfile(), mode="wb")
 GHB_J <- foreign::read.xport(tf)[,c("SEQN", "LBXGH")]
 
+#hsCRP >7.5 MG/L
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/HSCRP_I.XPT", tf <- tempfile(), mode="wb")
+HSCRP_I <- foreign::read.xport(tf)[,c("SEQN", "LBXHSCRP")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/HSCRP_J.XPT", tf <- tempfile(), mode="wb")
+HSCRP_J <- foreign::read.xport(tf)[,c("SEQN", "LBXHSCRP")]
+
 #Pregnancy and Breast Feeding
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/RHQ_I.XPT", tf <- tempfile(), mode="wb")
 RHQ_I <- foreign::read.xport(tf)[,c("SEQN", "RHD143", "RHQ200")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/RHQ_J.XPT", tf <- tempfile(), mode="wb")
 RHQ_J <- foreign::read.xport(tf)[,c("SEQN", "RHD143", "RHQ200")]
+
+#BMI greater than 30 BMXBMI
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/BMX_I.XPT", tf <- tempfile(), mode="wb")
+BMX_I <- foreign::read.xport(tf)[,c("SEQN", "BMXBMI")]
+download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/BMX_J.XPT", tf <- tempfile(), mode="wb")
+BMX_J <- foreign::read.xport(tf)[,c("SEQN", "BMXBMI")]
 
 #Append Files
 DEMO <- bind_rows(DEMO_I, DEMO_J)
@@ -81,7 +93,9 @@ HSQ <- bind_rows(HSQ_I, HSQ_J)
 ALQ <- bind_rows(ALQ_I, ALQ_J)
 SMQ <- bind_rows(SMQ_I, SMQ_J)
 GHB <- bind_rows(GHB_I, GHB_J)
+HSCRP <- bind_rows(HSCRP_I, HSCRP_J)
 RHQ <- bind_rows(RHQ_I, RHQ_J)
+BMX <- bind_rows(BMX_I, BMX_J)
 
 #------------------------------------------
 #Determine number of SEQNs before exclusions
@@ -94,7 +108,7 @@ DEMO <- DEMO %>%
   mutate(WTMEC4YR = WTMEC2YR / 2)
 
 # Combine all datasets into one dataframe
-combined_data <- reduce(list(DEMO, CBC, BIOPRO, HEPBD, HEPC, HSQ, ALQ, SMQ, GHB, RHQ), full_join, by = "SEQN")
+combined_data <- reduce(list(DEMO, CBC, BIOPRO, HEPBD, HEPC, HSQ, ALQ, SMQ, GHB, HSCRP, RHQ, BMX), full_join, by = "SEQN")
 
 # Check that the necessary columns exist
 required_columns <- c("SEQN", "SDMVPSU", "SDMVSTRA", "WTMEC4YR")
@@ -208,7 +222,7 @@ summarize_counts(combined_data_excluded_blood_donation, nhanes_design_excluded_b
 
 # Apply exclusion criteria for 2015-2016 data: ALQ141Q >= 54----------------------------------------------
 combined_data_excluded_alcohol_2015_2016 <- combined_data_excluded_blood_donation %>%
-  filter((is.na(ALQ141Q) | ALQ141Q < 54))
+  filter((is.na(ALQ141Q) | ALQ141Q < 104))
 
 # Apply exclusion criteria for 2017-2018 data: ALQ142 in 1, 2, 3, or 4
 combined_data_excluded_alcohol <- combined_data_excluded_alcohol_2015_2016 %>%
@@ -220,8 +234,18 @@ nhanes_design_excluded_alcohol <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, w
 # Summarize counts after exclusion and save as PDF
 summarize_counts(combined_data_excluded_alcohol, nhanes_design_excluded_alcohol, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_alcohol.pdf")
 
+# Apply exclusion criteria: hsCRP LBXHSCRP >7.5 mg/L
+combined_data_excluded_hscrp <- combined_data_excluded_alcohol %>%
+  filter(LBXHSCRP > 7.5 | is.na(LBXHSCRP))
+
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_hscrp <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_pregnancy_breastfeeding, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_hscrp, nhanes_design_excluded_hscrp, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_hscrp.pdf")
+
 # Apply exclusion criteria: Pregnancy (RHD143 == 1) and Breastfeeding (RHQ200 == 1) for females
-combined_data_excluded_pregnancy_breastfeeding <- combined_data_excluded_alcohol %>%
+combined_data_excluded_pregnancy_breastfeeding <- combined_data_excluded_hscrp %>%
   filter(!(RIAGENDR == 2 & (RHD143 == 1 | RHQ200 == 1)))
 
 # Create a new survey design object using the filtered data
@@ -230,6 +254,15 @@ nhanes_design_excluded_pregnancy_breastfeeding <- svydesign(id = ~SDMVPSU, strat
 # Summarize counts after exclusion and save as PDF
 summarize_counts(combined_data_excluded_pregnancy_breastfeeding, nhanes_design_excluded_pregnancy_breastfeeding, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_pregnancy_breastfeeding.pdf")
 
+#Apply exclusion criteria: BMI (BMXBMI > 30)
+combined_data_excluded_bmi <- combined_data_excluded_pregnancy_breastfeeding %>%
+filter(BMXBMI > 30 | is.na(BMXBMI))
+
+# Create a new survey design object using filtered data
+nhanes_design_excluded_bmi <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_bmi, nest = TRUE)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_bmi, nhanes_design_excluded_bmi, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_bmi.pdf")
 
 
 
