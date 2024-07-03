@@ -264,6 +264,13 @@ nhanes_design_excluded_bmi <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weigh
 # Summarize counts after exclusion and save as PDF
 summarize_counts(combined_data_excluded_bmi, nhanes_design_excluded_bmi, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_bmi.pdf")
 
+# Apply exclusion criteria: Age < 20
+combined_data_excluded_age <- combined_data_excluded_bmi %>%
+  filter(RIDAGEYR > 20)
 
+# Create a new survey design object using the filtered data
+nhanes_design_excluded_age <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_age, nest = TRUE)
 
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_excluded_age, nhanes_design_excluded_age, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_age.pdf")
 
