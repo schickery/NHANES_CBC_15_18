@@ -254,7 +254,7 @@ nhanes_design_excluded_pregnancy_breastfeeding <- svydesign(id = ~SDMVPSU, strat
 # Summarize counts after exclusion and save as PDF
 summarize_counts(combined_data_excluded_pregnancy_breastfeeding, nhanes_design_excluded_pregnancy_breastfeeding, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_pregnancy_breastfeeding.pdf")
 
-#Apply exclusion criteria: BMI (BMXBMI > 30)
+# Apply exclusion criteria: BMI (BMXBMI > 30)
 combined_data_excluded_bmi <- combined_data_excluded_pregnancy_breastfeeding %>%
 filter(BMXBMI > 30 | is.na(BMXBMI))
 
@@ -273,4 +273,27 @@ nhanes_design_excluded_age <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weigh
 
 # Summarize counts after exclusion and save as PDF
 summarize_counts(combined_data_excluded_age, nhanes_design_excluded_age, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_age.pdf")
+
+# Remove Missing CBCs
+# Define the list of CBC variables
+cbc_vars <- c("LBXWBCSI", "LBXLYPCT", "LBXMOPCT", "LBXNEPCT", "LBXEOPCT", 
+              "LBXBAPCT", "LBXRBCSI", "LBXHGB", "LBXHCT", "LBXMCVSI", 
+              "LBXMCHSI", "LBXMC", "LBXRDW", "LBXPLTSI", "LBXMPSI")
+
+# Remove cases with any missing CBC variables
+combined_data_complete_cases <- combined_data_excluded_age %>%
+  filter(!is.na(LBXWBCSI) & !is.na(LBXLYPCT) & !is.na(LBXMOPCT) & !is.na(LBXNEPCT) & 
+           !is.na(LBXEOPCT) & !is.na(LBXBAPCT) & !is.na(LBXRBCSI) & !is.na(LBXHGB) & 
+           !is.na(LBXHCT) & !is.na(LBXMCVSI) & !is.na(LBXMCHSI) & !is.na(LBXMC) & 
+           !is.na(LBXRDW) & !is.na(LBXPLTSI) & !is.na(LBXMPSI))
+
+# Create a new survey design object using the filtered data
+nhanes_design_complete_cases <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_complete_cases, nest = TRUE)
+
+# Check the dimensions and summary of the filtered data
+dim(combined_data_complete_cases)
+summary(combined_data_complete_cases)
+
+# Summarize counts after exclusion and save as PDF
+summarize_counts(combined_data_complete_cases, nhanes_design_complete_cases, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_complete_cases.pdf")
 
