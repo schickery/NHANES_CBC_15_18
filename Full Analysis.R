@@ -161,157 +161,156 @@ summary(nhanes_design)
 unique_seqn_count <- n_distinct(combined_data$SEQN)
 print(paste("Number of unique SEQN in the combined dataset:", unique_seqn_count))
 
-summarize_counts <- function(data, design, file_name) {
-  # Summarizing counts by gender and race using the survey design
-  gender_race_weighted_counts <- svytable(~RIAGENDR + RIDRETH3, design)
-  
-  # Convert to a data frame
-  gender_race_weighted_df <- as.data.frame(gender_race_weighted_counts)
-  colnames(gender_race_weighted_df) <- c("gender", "race", "count")
-  
-  # Decode gender and race
-  gender_race_weighted_df <- gender_race_weighted_df %>%
-    mutate(
-      gender = recode(gender, `1` = "Male", `2` = "Female"),
-      race = recode(race,
-                    `1` = "Mexican American",
-                    `2` = "Other Hispanic",
-                    `3` = "Non-Hispanic White",
-                    `4` = "Non-Hispanic Black",
-                    `6` = "Non-Hispanic Asian",
-                    `7` = "Other Race - Including Multi-Racial")
-    )
-  
-  # Pivot the data to wide format
-  gender_race_table <- gender_race_weighted_df %>%
-    pivot_wider(names_from = race, values_from = count, values_fill = list(count = 0))
-  
-  # Print the table
-  print(gender_race_table)
-  
-  # Create a table grob
-  table_grob <- tableGrob(gender_race_table)
-  
-  # Adjust column widths
-  col_widths <- unit(rep(1, ncol(table_grob)), "npc") / ncol(table_grob)
-  table_grob$widths <- col_widths
-  
-  # Save the table grob as a PDF with adjusted page size
-  pdf(file_name, width = 12, height = 6)  # Adjust width and height as needed
-  grid.draw(table_grob)
-  dev.off()
+# Load necessary libraries
+library(dplyr)
+library(survey)
+
+# Define age groups
+combined_data <- combined_data %>%
+  filter(!is.na(RIDAGEYR)) %>%  # Remove rows with NA ages
+  mutate(Age_group = case_when(
+    RIDAGEYR >= 0 & RIDAGEYR <= 19 ~ "0-19",
+    RIDAGEYR >= 20 & RIDAGEYR <= 39 ~ "20-39",
+    RIDAGEYR >= 40 & RIDAGEYR <= 59 ~ "40-59",
+    RIDAGEYR >= 60 ~ "60+",
+    TRUE ~ NA_character_
+  ))
+
+# Remove rows with NA Age_group
+combined_data <- combined_data %>%
+  filter(!is.na(Age_group))
+
+# Group by race, gender, and age group
+grouped_data <- combined_data %>%
+  group_by(RIDRETH3, RIAGENDR, Age_group)
+
+# View the first few rows of the grouped data
+head(grouped_data)
+
+# Create a summary table with all CBC variables
+summary_table <- grouped_data %>%
+  summarise(
+    Count = n(),
+    Median_LBXWBCSI = median(LBXWBCSI, na.rm = TRUE),
+    Median_LBXLYPCT = median(LBXLYPCT, na.rm = TRUE),
+    Median_LBXMOPCT = median(LBXMOPCT, na.rm = TRUE),
+    Median_LBXNEPCT = median(LBXNEPCT, na.rm = TRUE),
+    Median_LBXEOPCT = median(LBXEOPCT, na.rm = TRUE),
+    Median_LBXBAPCT = median(LBXBAPCT, na.rm = TRUE),
+    Median_LBXRBCSI = median(LBXRBCSI, na.rm = TRUE),
+    Median_LBXHGB = median(LBXHGB, na.rm = TRUE),
+    Median_LBXHCT = median(LBXHCT, na.rm = TRUE),
+    Median_LBXMCVSI = median(LBXMCVSI, na.rm = TRUE),
+    Median_LBXMCHSI = median(LBXMCHSI, na.rm = TRUE),
+    Median_LBXMC = median(LBXMC, na.rm = TRUE),
+    Median_LBXRDW = median(LBXRDW, na.rm = TRUE),
+    Median_LBXPLTSI = median(LBXPLTSI, na.rm = TRUE),
+    Median_LBXMPSI = median(LBXMPSI, na.rm = TRUE)
+  )
+
+# View the summary table
+print(summary_table)
+
+# Optional: create a survey design object with the grouped data
+nhanes_design_grouped <- svydesign(
+  id = ~SDMVPSU,
+  strata = ~SDMVSTRA,
+  weights = ~WTMEC4YR,
+  data = grouped_data,
+  nest = TRUE
+)
+
+# Check the summary of the survey design object for the grouped data
+summary(nhanes_design_grouped)
+
+# Check the structure and summary of the combined dataset
+str(combined_data)
+summary(combined_data)
+
+# Check for missing values in important columns
+sapply(combined_data, function(x) sum(is.na(x)))
+
+
+# Function to print number of rows and sample data after each exclusion step
+print_status <- function(data, step) {
+  cat("\nNumber of rows after", step, ":", nrow(data), "\n")
+  head(data)
 }
 
-# Initial summary without exclusions
-summarize_counts(combined_data, nhanes_design, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/NHANES_CBC_15_18/initial_summary.pdf")
+# Check initial dimensions and summary
+print("Initial data dimensions and summary:")
+dim(combined_data)
+summary(combined_data)
 
-# Apply exclusion criteria: A1C >= 6.5%--------------------------------------------------------------------------------------
+# Apply exclusion criteria: A1C >= 6.5%
 combined_data_excluded_a1c <- combined_data %>%
   filter(LBXGH < 6.5 | is.na(LBXGH))
+print_status(combined_data_excluded_a1c, "excluding A1C >= 6.5%")
 
 # Create a new survey design object using the filtered data
-nhanes_design_excluded_a1c <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded, nest = TRUE)
+nhanes_design_excluded_a1c <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_a1c, nest = TRUE)
 
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_a1c, nhanes_design_excluded_a1c, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion.pdf")
-
-# Apply exclusion criteria: Serum creatinine > 2.5 mg/dL--------------------------------------------------
+# Apply exclusion criteria: Serum creatinine > 2.5 mg/dL
 combined_data_excluded_creatinine <- combined_data_excluded_a1c %>%
   filter(LBXSCR < 2.5 | is.na(LBXSCR))
+print_status(combined_data_excluded_creatinine, "excluding Serum creatinine > 2.5 mg/dL")
 
 # Create a new survey design object using the filtered data
 nhanes_design_excluded_creatinine <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_creatinine, nest = TRUE)
 
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_creatinine, nhanes_design_excluded_creatinine, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_creatinine.pdf")
-
-# Apply exclusion criteria: Hepatitis C positivity (LBXHCR == 1)--------------------------------------------------------
+# Apply exclusion criteria: Hepatitis C positivity (LBXHCR == 1)
 combined_data_excluded_hepc <- combined_data_excluded_creatinine %>%
   filter(LBXHCR != 1 | is.na(LBXHCR))
+print_status(combined_data_excluded_hepc, "excluding Hepatitis C positivity")
 
 # Create a new survey design object using the filtered data
 nhanes_design_excluded_hepc <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_hepc, nest = TRUE)
 
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_hepc, nhanes_design_excluded_hepc, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_hepc.pdf")
-
-# Apply exclusion criteria: Hepatitis B surface antigen (LBDHBG == 1) or core antibody (LBXHBC == 1)---------------------------------
+# Apply exclusion criteria: Hepatitis B surface antigen (LBDHBG == 1) or core antibody (LBXHBC == 1)
 combined_data_excluded_hepb <- combined_data_excluded_hepc %>%
   filter((LBDHBG != 1 | is.na(LBDHBG)) & (LBXHBC != 1 | is.na(LBXHBC)))
+print_status(combined_data_excluded_hepb, "excluding Hepatitis B surface antigen or core antibody")
 
 # Create a new survey design object using the filtered data
 nhanes_design_excluded_hepb <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_hepb, nest = TRUE)
 
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_hepb, nhanes_design_excluded_hepb, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_hepb.pdf")
-
-# Apply exclusion criteria: Blood donation in the past 12 weeks (HSQ580 == 1, 2, or 3)
-#combined_data_excluded_blood_donation <- combined_data_excluded_hepb %>%
-#  filter(!(HSQ580 %in% c(1, 2, 3)))
-
-# Create a new survey design object using the filtered data
-#nhanes_design_excluded_blood_donation <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_blood_donation, nest = TRUE)
-
-# Summarize counts after exclusion and save as PDF
-#summarize_counts(combined_data_excluded_blood_donation, nhanes_design_excluded_blood_donation, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_blood_donation.pdf")
-
-# Apply exclusion criteria for 2015-2016 data: ALQ141Q >= 54----------------------------------------------
+# Apply exclusion criteria for 2015-2016 data: ALQ141Q >= 104
 combined_data_excluded_alcohol_2015_2016 <- combined_data_excluded_hepb %>%
-  filter((is.na(ALQ141Q) | ALQ141Q < 104))
+  filter(is.na(ALQ141Q) | ALQ141Q < 104)
+print_status(combined_data_excluded_alcohol_2015_2016, "excluding ALQ141Q >= 104 (2015-2016)")
 
 # Apply exclusion criteria for 2017-2018 data: ALQ142 in 1, 2, 3, or 4
 combined_data_excluded_alcohol <- combined_data_excluded_alcohol_2015_2016 %>%
   filter(!(ALQ142 %in% c(1, 2, 3, 4)))
+print_status(combined_data_excluded_alcohol, "excluding ALQ142 in 1, 2, 3, or 4 (2017-2018)")
 
 # Create a new survey design object using the filtered data
 nhanes_design_excluded_alcohol <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_alcohol, nest = TRUE)
 
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_alcohol, nhanes_design_excluded_alcohol, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_alcohol.pdf")
-
-# Apply exclusion criteria: hsCRP LBXHSCRP >7.5 mg/L
-#combined_data_excluded_hscrp <- combined_data_excluded_alcohol %>%
-#  filter(LBXHSCRP > 7.5 | is.na(LBXHSCRP))
-
-# Create a new survey design object using the filtered data
-#nhanes_design_excluded_hscrp <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_pregnancy_breastfeeding, nest = TRUE)
-
-# Summarize counts after exclusion and save as PDF
-#summarize_counts(combined_data_excluded_hscrp, nhanes_design_excluded_hscrp, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_hscrp.pdf")
-
 # Apply exclusion criteria: Pregnancy (RHD143 == 1) and Breastfeeding (RHQ200 == 1) for females
 combined_data_excluded_pregnancy_breastfeeding <- combined_data_excluded_alcohol %>%
   filter(!(RIAGENDR == 2 & (RHD143 == 1 | RHQ200 == 1)))
+print_status(combined_data_excluded_pregnancy_breastfeeding, "excluding Pregnancy and Breastfeeding")
 
 # Create a new survey design object using the filtered data
 nhanes_design_excluded_pregnancy_breastfeeding <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_pregnancy_breastfeeding, nest = TRUE)
 
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_pregnancy_breastfeeding, nhanes_design_excluded_pregnancy_breastfeeding, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_pregnancy_breastfeeding.pdf")
-
 # Apply exclusion criteria: BMI (BMIWAIST >35 in Women and >40 in Men)
 combined_data_excluded_bmi <- combined_data_excluded_pregnancy_breastfeeding %>%
-  filter(case_when(
-    RIAGENDR == 2 ~ BMIWAIST <= 35 | is.na(BMIWAIST),  # Females: BMIWAIST <= 35 or NA
-    RIAGENDR == 1 ~ BMIWAIST <= 40 | is.na(BMIWAIST),  # Males: BMIWAIST <= 40 or NA
-    TRUE ~ TRUE  # Keep all other records if the gender is not 1 or 2
-  ))
+  filter((RIAGENDR == 2 & (BMIWAIST <= 35 | is.na(BMIWAIST))) | 
+           (RIAGENDR == 1 & (BMIWAIST <= 40 | is.na(BMIWAIST))))
+print_status(combined_data_excluded_bmi, "excluding BMI (BMIWAIST >35 in Women and >40 in Men)")
 
 # Create a new survey design object using filtered data
 nhanes_design_excluded_bmi <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_bmi, nest = TRUE)
 
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_bmi, nhanes_design_excluded_bmi, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_bmi.pdf")
-
 # Apply exclusion criteria: Age < 20
 combined_data_excluded_age <- combined_data_excluded_bmi %>%
   filter(RIDAGEYR > 20)
+print_status(combined_data_excluded_age, "excluding Age < 20")
 
 # Create a new survey design object using the filtered data
 nhanes_design_excluded_age <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_age, nest = TRUE)
-
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_excluded_age, nhanes_design_excluded_age, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_age.pdf")
 
 # Remove Missing CBCs
 # Define the list of CBC variables
@@ -325,30 +324,30 @@ combined_data_complete_cases <- combined_data_excluded_age %>%
            !is.na(LBXEOPCT) & !is.na(LBXBAPCT) & !is.na(LBXRBCSI) & !is.na(LBXHGB) & 
            !is.na(LBXHCT) & !is.na(LBXMCVSI) & !is.na(LBXMCHSI) & !is.na(LBXMC) & 
            !is.na(LBXRDW) & !is.na(LBXPLTSI) & !is.na(LBXMPSI))
+print_status(combined_data_complete_cases, "excluding Missing CBCs")
 
-# Create a new survey design object using the filtered data
-nhanes_design_complete_cases <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_complete_cases, nest = TRUE)
-
-# Check the dimensions and summary of the filtered data
-dim(combined_data_complete_cases)
-summary(combined_data_complete_cases)
-
-# Summarize counts after exclusion and save as PDF
-summarize_counts(combined_data_complete_cases, nhanes_design_complete_cases, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_complete_cases.pdf")
-
-# Define age groups
+# Ensure age groups are defined correctly after exclusions
 combined_data_complete_cases <- combined_data_complete_cases %>%
-  mutate(age_group = case_when(
+  filter(!is.na(RIDAGEYR)) %>%  # Remove rows with NA ages
+  mutate(Age_group = case_when(
+    RIDAGEYR >= 0 & RIDAGEYR <= 19 ~ "0-19",
     RIDAGEYR >= 20 & RIDAGEYR <= 39 ~ "20-39",
     RIDAGEYR >= 40 & RIDAGEYR <= 59 ~ "40-59",
-    RIDAGEYR >= 60 ~ "60+",  # Fixed age group for consistency
-    TRUE ~ NA_character_ 
+    RIDAGEYR >= 60 ~ "60+",
+    TRUE ~ NA_character_
   ))
+
+# Remove rows with NA Age_group
+combined_data_complete_cases <- combined_data_complete_cases %>%
+  filter(!is.na(Age_group))
+
+# Create a survey design object using the filtered data
+nhanes_design_complete_cases <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_complete_cases, nest = TRUE)
 
 # Function to filter data by race, gender, and age group
 filter_data <- function(data, race, gender, age_group) {
   data %>%
-    filter(RIDRETH3 == race & RIAGENDR == gender & age_group == age_group)
+    filter(RIDRETH3 == race & RIAGENDR == gender & Age_group == age_group)
 }
 
 races <- c(1, 2, 3, 4, 6)  # Exclude race code 7 (other, mixed race)
@@ -370,17 +369,16 @@ for (race in races) {
 
 # Remove cases where age_group is NA and race is "other, mixed race"
 combined_data_complete_cases <- combined_data_complete_cases %>%
-  filter(!is.na(age_group) & RIDRETH3 != 7)
+  filter(!is.na(Age_group) & RIDRETH3 != 7)
 
 # Count the number of cases for each combination of gender, race, and age group
 count_cases <- combined_data_complete_cases %>%
-  group_by(RIDRETH3, RIAGENDR, age_group) %>%
+  group_by(RIDRETH3, RIAGENDR, Age_group) %>%
   summarise(count = n()) %>%
   ungroup()
 
 # Print the count cases
 print(count_cases)
-
 
 # Save the summary counts as a CSV file
 write.csv(count_cases, file = "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/NHANES_filtered_data_summary.csv", row.names = FALSE)
@@ -401,7 +399,7 @@ calculate_descriptive_stats <- function(data, variable) {
 
 # Apply this function to the CBC variables grouped by race, gender, and age group
 descriptive_stats <- combined_data_complete_cases %>%
-  group_by(RIDRETH3, RIAGENDR, age_group) %>%
+  group_by(RIDRETH3, RIAGENDR, Age_group) %>%
   summarise(
     across(c("LBXWBCSI", "LBXLYPCT", "LBXMOPCT", "LBXNEPCT", "LBXEOPCT", 
              "LBXBAPCT", "LBXRBCSI", "LBXHGB", "LBXHCT", "LBXMCVSI", 
@@ -430,7 +428,7 @@ men_data <- combined_data_complete_cases %>%
 # Define a function to calculate unweighted descriptive statistics for men
 calculate_unweighted_stats_men <- function(data) {
   data %>%
-    group_by(RIDRETH3, age_group) %>%
+    group_by(RIDRETH3, Age_group) %>%
     summarise(
       n = n(),
       Mean_Age = mean(RIDAGEYR, na.rm = TRUE),
@@ -456,7 +454,7 @@ unweighted_stats_men <- unweighted_stats_men %>%
 
 # Select and reorder columns for the table
 unweighted_stats_men <- unweighted_stats_men %>%
-  select(race, age_group, n, Mean_Age, SD_Age)
+  select(race, Age_group, n, Mean_Age, SD_Age)
 
 # Create and format the table
 unweighted_stats_men %>%
@@ -466,9 +464,6 @@ unweighted_stats_men %>%
   column_spec(1:5, width = "2em") %>%
   save_kable("/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/unweighted_descriptive_stats_men_table.html")
 
-# Filter data for men only and exclude rows with NA ages
-men_data <- combined_data_complete_cases %>%
-  filter(RIAGENDR == 1 & !is.na(RIDAGEYR))
 
 # Install and load necessary packages
 install.packages("webshot")
@@ -496,7 +491,7 @@ nhanes_design_men <- svydesign(
 
 # Define age groups
 men_data <- men_data %>%
-  mutate(age_group = case_when(
+  mutate(Age_group = case_when(
     RIDAGEYR >= 20 & RIDAGEYR <= 39 ~ "20-39",
     RIDAGEYR >= 40 & RIDAGEYR <= 59 ~ "40-59",
     RIDAGEYR >= 60 ~ "60+",
@@ -504,7 +499,7 @@ men_data <- men_data %>%
   ))
 
 # Calculate weighted n (number of participants)
-weighted_n <- svyby(~one, ~RIDRETH3 + age_group, nhanes_design_men, svytotal, na.rm = TRUE)
+weighted_n <- svyby(~one, ~RIDRETH3 + Age_group, nhanes_design_men, svytotal, na.rm = TRUE)
 weighted_n <- weighted_n %>%
   rename(n = one) %>%
   mutate(n = as.numeric(n))
@@ -522,7 +517,7 @@ weighted_n <- weighted_n %>%
 
 # Select and reorder columns for the table
 weighted_n <- weighted_n %>%
-  select(race, age_group, n)
+  select(race, Age_group, n)
 
 # Print the table
 print(weighted_n)
@@ -538,66 +533,20 @@ weighted_n_table <- weighted_n %>%
 pdf_file_path <- "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/weighted_n_table.pdf"
 save_kable(weighted_n_table, pdf_file_path)
 
-# Optionally, print the table to the console
-print(weighted_n_table)
-
-
-
 #Calculating non-parametric reference ranges for the CBC parameters
-# Install PhantomJS for webshot
-webshot::install_phantomjs()
-
-# Install necessary packages
-install.packages("srvyr")
-library(srvyr)
-library(dplyr)
-
-# Install PhantomJS for webshot
-webshot::install_phantomjs()
-
-# Install necessary packages
-install.packages("srvyr")
-library(srvyr)
-library(dplyr)
-
-# Filter data for men only, exclude rows with NA ages and "other race" category
-men_data <- combined_data_complete_cases %>%
-  filter(RIAGENDR == 1 & !is.na(RIDAGEYR) & RIDRETH3 != 7)
-
-# Define age groups
-men_data <- men_data %>%
-  mutate(age_group = case_when(
-    RIDAGEYR >= 20 & RIDAGEYR <= 39 ~ "20-39",
-    RIDAGEYR >= 40 & RIDAGEYR <= 59 ~ "40-59",
-    RIDAGEYR >= 60 ~ "60+",
-    TRUE ~ NA_character_ 
-  ))
-
-# Create a survey design object for men
-nhanes_design_men <- svydesign(
-  id = ~SDMVPSU,
-  strata = ~SDMVSTRA,
-  weights = ~WTMEC4YR,
-  data = men_data,
-  nest = TRUE
-)
-
-# Convert to srvyr design
-nhanes_srvyr_design <- as_survey(nhanes_design_men)
-
-calculate_weighted_percentiles <- function(design, variable) {
-  tryCatch({
-    result <- design %>%
-      summarize(
-        lower = survey_quantile(get(variable), quantiles = c(0.025), na.rm = TRUE) %>% as.numeric(),
-        median = survey_quantile(get(variable), quantiles = c(0.50), na.rm = TRUE) %>% as.numeric(),
-        upper = survey_quantile(get(variable), quantiles = c(0.975), na.rm = TRUE) %>% as.numeric()
-      )
-    return(result)
-  }, error = function(e) {
-    message(paste("Error in calculating quantiles for", variable, ":", e$message))
-    return(data.frame(lower = NA, median = NA, upper = NA))
-  })
+## Define a function to calculate weighted percentiles
+calculate_weighted_percentiles <- function(variable, design) {
+  result <- svyby(
+    ~ get(variable),
+    ~ RIDRETH3 + Age_group,
+    design,
+    svyquantile,
+    quantiles = c(0.025, 0.5, 0.975),
+    ci = TRUE,
+    na.rm = TRUE
+  )
+  result$Variable <- variable
+  return(result)
 }
 
 # List of CBC variables
@@ -605,52 +554,195 @@ cbc_vars <- c("LBXWBCSI", "LBXLYPCT", "LBXMOPCT", "LBXNEPCT", "LBXEOPCT",
               "LBXBAPCT", "LBXRBCSI", "LBXHGB", "LBXHCT", "LBXMCVSI", 
               "LBXMCHSI", "LBXMC", "LBXRDW", "LBXPLTSI", "LBXMPSI")
 
-# Create an empty data frame to store results
-results <- data.frame()
+# Calculate percentiles for each CBC variable
+percentile_list <- lapply(cbc_vars, calculate_weighted_percentiles, nhanes_design_men)
 
-# Loop through each race, age group, and CBC parameter
-for (race in c(1, 2, 3, 4, 6)) {
-  for (age_group in c("20-39", "40-59", "60+")) {
-    for (cbc_var in cbc_vars) {
-      # Subset the survey design for the current race and age group
-      design_subset <- nhanes_srvyr_design %>%
-        filter(RIDRETH3 == race & age_group == age_group)
-      if (nrow(design_subset$variables) > 0) {
-        quantiles <- calculate_weighted_percentiles(design_subset, cbc_var)
-        result <- quantiles %>%
-          mutate(Race = race, AgeGroup = age_group, Parameter = cbc_var)
-        results <- bind_rows(results, result)
-      }
-    }
+# Combine the results into a single data frame
+percentile_df <- do.call(rbind, percentile_list)
+
+# Rename the columns for readability
+colnames(percentile_df) <- c("Race", "Age Group", "2.5th Percentile", "50th Percentile", "97.5th Percentile", "Variable")
+
+# Decode race for readability
+percentile_df$Race <- recode(percentile_df$Race,
+                             `1` = "Mexican American",
+                             `2` = "Other Hispanic",
+                             `3` = "Non-Hispanic White",
+                             `4` = "Non-Hispanic Black",
+                             `6` = "Non-Hispanic Asian")
+
+# Print the percentiles
+print(percentile_df)
+
+# Save the percentiles as a CSV file
+write.csv(percentile_df, file = "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/weighted_percentiles_with_variables.csv", row.names = FALSE)
+
+
+#KW Tests
+
+# Load necessary packages
+library(dplyr)
+library(stats)
+library(FSA)
+library(ggplot2)
+
+# Function to run Kruskal-Wallis test based on filtered data for men
+run_kruskal_wallis_actual_data <- function(data, variable, race) {
+  # Filter data for the specified CBC variable, race, and excluding age group 0-19
+  test_data <- data %>%
+    filter(RIDRETH3 == race & Age_group != "0-19" & !is.na(.data[[variable]])) %>%
+    mutate(Age_group = as.factor(Age_group)) # Ensure Age_group is a factor
+  
+  # Print the first few rows of the filtered data to ensure it's correct
+  print(paste("Filtered data for variable", variable, "and race", race))
+  print(head(test_data))
+  
+  # Check if there are at least two groups to compare
+  if (n_distinct(test_data$Age_group) > 1) {
+    # Perform the Kruskal-Wallis test
+    kw_test <- kruskal.test(as.formula(paste(variable, "~ Age_group")), data = test_data)
+    
+    # Print the results
+    print(paste("Kruskal-Wallis test for", variable, "in race", race))
+    print(kw_test)
+    
+    # Return the result as a data frame and the filtered data
+    result <- data.frame(
+      Variable = variable,
+      Race = race,
+      p_value = kw_test$p.value
+    )
+    
+    return(list(result = result, test_data = test_data))
+  } else {
+    print("Not enough groups to perform the Kruskal-Wallis test.")
+    return(NULL)
   }
 }
 
-# Decode race for readability
-results <- results %>%
-  mutate(
-    Race = recode(Race,
-                  `1` = "Mexican American",
-                  `2` = "Other Hispanic",
-                  `3` = "Non-Hispanic White",
-                  `4` = "Non-Hispanic Black",
-                  `6` = "Non-Hispanic Asian")
-  )
+# Manually enter the CBC variable and race
+variable <- "LBXPLTSI" # Replace with the desired CBC variable
+race <- 4 # Replace with the desired race code (e.g., 6 for Non-Hispanic Asian)
 
-# Ensure the column names match
-colnames(results) <- c("Lower_2.5th_Percentile", "50th_Percentile_Median", "Upper_97.5th_Percentile", "Race", "Age_Group", "Parameter")
+# Run the Kruskal-Wallis test using the men_data dataset
+kw_result <- run_kruskal_wallis_actual_data(men_data, variable, race)
 
-# Convert the 50th_Percentile_Median to be in percentage format
-results <- results %>%
-  mutate(
-    Lower_2.5th_Percentile = round(Lower_2.5th_Percentile, 2),
-    `50th_Percentile_Median` = round(`50th_Percentile_Median`, 2),
-    Upper_97.5th_Percentile = round(Upper_97.5th_Percentile, 2)
-  )
+# Print the result if not null
+if (!is.null(kw_result)) {
+  print(kw_result$result)
+  
+  # Extract the test data for further analysis
+  test_data <- kw_result$test_data
+  
+  # Perform Dunn's test for post-hoc analysis
+  dunn_result <- dunnTest(as.formula(paste(variable, "~ Age_group")), data = test_data, method = "bonferroni")
+  
+  # Print the Dunn's test result
+  print(dunn_result)
+  
+  # Visualize the data with a boxplot
+  ggplot(test_data, aes(x = Age_group, y = .data[[variable]], fill = Age_group)) +
+    geom_boxplot() +
+    labs(title = paste("Distribution of", variable, "by Age Group within Non-Hispanic Asian Race (Males only)"),
+         x = "Age Group",
+         y = variable) +
+    theme_minimal()
+} else {
+  print("Kruskal-Wallis test result is NULL.")
+}
 
-# Save the results to a CSV file
-write.csv(results, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/reference_intervals_results.csv", row.names = FALSE)
+# Across Race by Age
+# Load necessary packages
+library(dplyr)
+library(stats)
+library(FSA)
+library(ggplot2)
 
+# Function to run Kruskal-Wallis test and Dunn's test for each age group across races
+run_kruskal_wallis_by_age_group <- function(data, variable) {
+  age_groups <- c("20-39", "40-59", "60+")
+  
+  results <- list()
+  
+  for (age_group in age_groups) {
+    # Filter data for the specified age group and CBC variable
+    test_data <- data %>%
+      filter(Age_group == age_group & !is.na(.data[[variable]])) %>%
+      mutate(Race = factor(RIDRETH3, labels = c("Mexican American", "Other Hispanic", "Non-Hispanic White", "Non-Hispanic Black", "Non-Hispanic Asian")))
+    
+    # Print the first few rows of the filtered data to ensure it's correct
+    print(paste("Filtered data for variable", variable, "and age group", age_group))
+    print(head(test_data))
+    
+    # Check if there are at least two groups to compare
+    if (n_distinct(test_data$Race) > 1) {
+      # Perform the Kruskal-Wallis test
+      kw_test <- kruskal.test(as.formula(paste(variable, "~ Race")), data = test_data)
+      
+      # Print the results
+      print(paste("Kruskal-Wallis test for", variable, "in age group", age_group))
+      print(kw_test)
+      
+      # Store the result
+      results[[age_group]] <- list(kw_test = kw_test)
+      
+      # If significant, perform Dunn's test
+      if (kw_test$p.value < 0.05) {
+        dunn_result <- dunnTest(as.formula(paste(variable, "~ Race")), data = test_data, method = "bonferroni")
+        
+        # Print the Dunn's test result
+        print(dunn_result)
+        
+        # Store the Dunn's test result
+        results[[age_group]]$dunn_result <- dunn_result
+        
+        # Visualize the data with a boxplot
+        p <- ggplot(test_data, aes(x = Race, y = .data[[variable]], fill = Race)) +
+          geom_boxplot() +
+          labs(title = paste("Distribution of", variable, "by Race within Age Group", age_group),
+               x = "Race",
+               y = variable) +
+          theme_minimal() +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1))
+        print(p)
+      }
+    } else {
+      print(paste("Not enough groups to perform the Kruskal-Wallis test for age group", age_group))
+    }
+  }
+  
+  return(results)
+}
 
+# List of CBC variables to analyze
+cbc_vars <- c("LBXWBCSI", "LBXLYPCT", "LBXMOPCT", "LBXNEPCT", "LBXEOPCT", 
+              "LBXBAPCT", "LBXRBCSI", "LBXHGB", "LBXHCT", "LBXMCVSI", 
+              "LBXMCHSI", "LBXMC", "LBXRDW", "LBXPLTSI", "LBXMPSI")
+
+# Define the path for the PDF file
+pdf_path <- "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/kruskal_wallis_results.pdf"
+
+# Open PDF device
+pdf(file = pdf_path)
+
+# Run the Kruskal-Wallis test and Dunn's test for each CBC variable across age groups and save to PDF
+results <- lapply(cbc_vars, run_kruskal_wallis_by_age_group, data = men_data)
+
+# Close PDF device
+dev.off()
+
+# Optionally, you can print or save the results
+print(results)
+
+# Load necessary package
+library(dplyr)
+
+# Count the number of unique SEQNs in men_data
+num_seqns <- men_data %>% 
+  summarise(unique_seqns = n_distinct(SEQN))
+
+# Print the result
+print(paste("Number of unique SEQNs in men_data:", num_seqns$unique_seqns))
 
 
 
