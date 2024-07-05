@@ -3,11 +3,19 @@ install.packages("tidyr")
 install.packages("survey")
 install.packages("ggplot2")
 install.packages("gridExtra")
+install.packages("webshot2")
+install.packages("purrr")
+install.packages("knitr")
+install.packages("kableExtra")
 library(dplyr)
 library(tidyr)
 library(survey)
 library(ggplot2)
 library(gridExtra)
+library(webshot2)
+library(purrr)
+library(knitr)
+library(kableExtra)
 
 #Install Files from NHANES Database
 #Demographics files
@@ -17,7 +25,6 @@ download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/DEMO_I.XPT", tf <- tem
 DEMO_I <- foreign::read.xport(tf)[,c("SEQN","RIAGENDR","RIDAGEYR","RIDEXPRG", "RIDRETH3", "SDMVSTRA","SDMVPSU","WTMEC2YR")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/P_DEMO.XPT", tf <- tempfile(), mode="wb")
 DEMO_P <- foreign::read.xport(tf)[,c("SEQN","RIAGENDR","RIDAGEYR","RIDEXPRG", "RIDRETH3", "SDMVSTRA","SDMVPSU","WTMECPRP")]
-
 
 #CBC Data (CBC)
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2013-2014/CBC_H.XPT", tf <- tempfile(), mode="wb")
@@ -96,13 +103,13 @@ RHQ_I <- foreign::read.xport(tf)[,c("SEQN", "RHD143", "RHQ200")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/P_RHQ.XPT", tf <- tempfile(), mode="wb")
 RHQ_P <- foreign::read.xport(tf)[,c("SEQN", "RHD143", "RHQ200")]
 
-#BMI greater than 30 BMXBMI
+#Waist over 35 in Women and 40 in Men
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2013-2014/BMX_H.XPT", tf <- tempfile(), mode="wb")
-BMX_H <- foreign::read.xport(tf)[,c("SEQN", "BMXBMI")]
+BMX_H <- foreign::read.xport(tf)[,c("SEQN", "BMIWAIST")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2015-2016/BMX_I.XPT", tf <- tempfile(), mode="wb")
-BMX_I <- foreign::read.xport(tf)[,c("SEQN", "BMXBMI")]
+BMX_I <- foreign::read.xport(tf)[,c("SEQN", "BMIWAIST")]
 download.file("https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/P_BMX.XPT", tf <- tempfile(), mode="wb")
-BMX_P <- foreign::read.xport(tf)[,c("SEQN", "BMXBMI")]
+BMX_P <- foreign::read.xport(tf)[,c("SEQN", "BMIWAIST")]
 
 #Append Files
 DEMO <- bind_rows(DEMO_H, DEMO_I, DEMO_P)
@@ -119,10 +126,6 @@ BMX <- bind_rows(BMX_H, BMX_I, BMX_P)
 
 #------------------------------------------
 #Determine number of SEQNs before exclusions
-
-install.packages("purrr")
-library(purrr)
-
 # Combine all datasets into one dataframe
 combined_data <- reduce(list(DEMO, CBC, BIOPRO, HEPBD, HEPC, ALQ, SMQ, GHB, RHQ, BMX), full_join, by = "SEQN")
 
@@ -286,9 +289,13 @@ nhanes_design_excluded_pregnancy_breastfeeding <- svydesign(id = ~SDMVPSU, strat
 # Summarize counts after exclusion and save as PDF
 summarize_counts(combined_data_excluded_pregnancy_breastfeeding, nhanes_design_excluded_pregnancy_breastfeeding, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/summary_after_exclusion_pregnancy_breastfeeding.pdf")
 
-# Apply exclusion criteria: BMI (BMXBMI > 30)
+# Apply exclusion criteria: BMI (BMIWAIST >35 in Women and >40 in Men)
 combined_data_excluded_bmi <- combined_data_excluded_pregnancy_breastfeeding %>%
-filter(BMXBMI > 30 | is.na(BMXBMI))
+  filter(case_when(
+    RIAGENDR == 2 ~ BMIWAIST <= 35 | is.na(BMIWAIST),  # Females: BMIWAIST <= 35 or NA
+    RIAGENDR == 1 ~ BMIWAIST <= 40 | is.na(BMIWAIST),  # Males: BMIWAIST <= 40 or NA
+    TRUE ~ TRUE  # Keep all other records if the gender is not 1 or 2
+  ))
 
 # Create a new survey design object using filtered data
 nhanes_design_excluded_bmi <- svydesign(id = ~SDMVPSU, strata = ~SDMVSTRA, weights = ~WTMEC4YR, data = combined_data_excluded_bmi, nest = TRUE)
@@ -334,7 +341,7 @@ combined_data_complete_cases <- combined_data_complete_cases %>%
   mutate(age_group = case_when(
     RIDAGEYR >= 20 & RIDAGEYR <= 39 ~ "20-39",
     RIDAGEYR >= 40 & RIDAGEYR <= 59 ~ "40-59",
-    RIDAGEYR >= 65 ~ "65+",
+    RIDAGEYR >= 60 ~ "60+",  # Fixed age group for consistency
     TRUE ~ NA_character_ 
   ))
 
@@ -344,9 +351,9 @@ filter_data <- function(data, race, gender, age_group) {
     filter(RIDRETH3 == race & RIAGENDR == gender & age_group == age_group)
 }
 
-races <- c(1, 2, 3, 4, 6, 7)  # Replace with actual race codes
+races <- c(1, 2, 3, 4, 6)  # Exclude race code 7 (other, mixed race)
 genders <- c(1, 2)  # 1 for Male, 2 for Female
-age_groups <- c("20-39", "40-59", "65+")
+age_groups <- c("20-39", "40-59", "60+")
 
 # List to store results
 results <- list()
@@ -361,14 +368,19 @@ for (race in races) {
   }
 }
 
+# Remove cases where age_group is NA and race is "other, mixed race"
+combined_data_complete_cases <- combined_data_complete_cases %>%
+  filter(!is.na(age_group) & RIDRETH3 != 7)
+
 # Count the number of cases for each combination of gender, race, and age group
 count_cases <- combined_data_complete_cases %>%
   group_by(RIDRETH3, RIAGENDR, age_group) %>%
   summarise(count = n()) %>%
   ungroup()
 
-# Print the resulting table
+# Print the count cases
 print(count_cases)
+
 
 # Save the summary counts as a CSV file
 write.csv(count_cases, file = "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/NHANES_filtered_data_summary.csv", row.names = FALSE)
@@ -410,11 +422,6 @@ print(descriptive_stats)
 
 # Save the descriptive statistics as a CSV file
 write.csv(descriptive_stats, file = "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/descriptive_stats.csv", row.names = FALSE)
-
-install.packages("knitr")
-install.packages("kableExtra")
-library(knitr)
-library(kableExtra)
 
 # Filter data for men only and exclude rows with NA ages
 men_data <- combined_data_complete_cases %>%
@@ -463,6 +470,21 @@ unweighted_stats_men %>%
 men_data <- combined_data_complete_cases %>%
   filter(RIAGENDR == 1 & !is.na(RIDAGEYR))
 
+# Install and load necessary packages
+install.packages("webshot")
+library(webshot)
+
+# Install PhantomJS for webshot2
+webshot::install_phantomjs()
+
+# Filter data for men only, exclude rows with NA ages and "other race" category
+men_data <- combined_data_complete_cases %>%
+  filter(RIAGENDR == 1 & !is.na(RIDAGEYR) & RIDRETH3 != 7)
+
+# Add a constant variable `one` with value 1
+men_data <- men_data %>%
+  mutate(one = 1)
+
 # Create a survey design object for men
 nhanes_design_men <- svydesign(
   id = ~SDMVPSU,
@@ -495,8 +517,7 @@ weighted_n <- weighted_n %>%
                   `2` = "Other Hispanic",
                   `3` = "Non-Hispanic White",
                   `4` = "Non-Hispanic Black",
-                  `6` = "Non-Hispanic Asian",
-                  `7` = "Other Race - Including Multi-Racial")
+                  `6` = "Non-Hispanic Asian")
   )
 
 # Select and reorder columns for the table
@@ -505,9 +526,6 @@ weighted_n <- weighted_n %>%
 
 # Print the table
 print(weighted_n)
-
-install.packages("webshot2")
-library(webshot2)
 
 # Create and format the table
 weighted_n_table <- weighted_n %>%
@@ -519,4 +537,120 @@ weighted_n_table <- weighted_n %>%
 # Save the table as a PDF
 pdf_file_path <- "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/weighted_n_table.pdf"
 save_kable(weighted_n_table, pdf_file_path)
+
+# Optionally, print the table to the console
+print(weighted_n_table)
+
+
+
+#Calculating non-parametric reference ranges for the CBC parameters
+# Install PhantomJS for webshot
+webshot::install_phantomjs()
+
+# Install necessary packages
+install.packages("srvyr")
+library(srvyr)
+library(dplyr)
+
+# Install PhantomJS for webshot
+webshot::install_phantomjs()
+
+# Install necessary packages
+install.packages("srvyr")
+library(srvyr)
+library(dplyr)
+
+# Filter data for men only, exclude rows with NA ages and "other race" category
+men_data <- combined_data_complete_cases %>%
+  filter(RIAGENDR == 1 & !is.na(RIDAGEYR) & RIDRETH3 != 7)
+
+# Define age groups
+men_data <- men_data %>%
+  mutate(age_group = case_when(
+    RIDAGEYR >= 20 & RIDAGEYR <= 39 ~ "20-39",
+    RIDAGEYR >= 40 & RIDAGEYR <= 59 ~ "40-59",
+    RIDAGEYR >= 60 ~ "60+",
+    TRUE ~ NA_character_ 
+  ))
+
+# Create a survey design object for men
+nhanes_design_men <- svydesign(
+  id = ~SDMVPSU,
+  strata = ~SDMVSTRA,
+  weights = ~WTMEC4YR,
+  data = men_data,
+  nest = TRUE
+)
+
+# Convert to srvyr design
+nhanes_srvyr_design <- as_survey(nhanes_design_men)
+
+calculate_weighted_percentiles <- function(design, variable) {
+  tryCatch({
+    result <- design %>%
+      summarize(
+        lower = survey_quantile(get(variable), quantiles = c(0.025), na.rm = TRUE) %>% as.numeric(),
+        median = survey_quantile(get(variable), quantiles = c(0.50), na.rm = TRUE) %>% as.numeric(),
+        upper = survey_quantile(get(variable), quantiles = c(0.975), na.rm = TRUE) %>% as.numeric()
+      )
+    return(result)
+  }, error = function(e) {
+    message(paste("Error in calculating quantiles for", variable, ":", e$message))
+    return(data.frame(lower = NA, median = NA, upper = NA))
+  })
+}
+
+# List of CBC variables
+cbc_vars <- c("LBXWBCSI", "LBXLYPCT", "LBXMOPCT", "LBXNEPCT", "LBXEOPCT", 
+              "LBXBAPCT", "LBXRBCSI", "LBXHGB", "LBXHCT", "LBXMCVSI", 
+              "LBXMCHSI", "LBXMC", "LBXRDW", "LBXPLTSI", "LBXMPSI")
+
+# Create an empty data frame to store results
+results <- data.frame()
+
+# Loop through each race, age group, and CBC parameter
+for (race in c(1, 2, 3, 4, 6)) {
+  for (age_group in c("20-39", "40-59", "60+")) {
+    for (cbc_var in cbc_vars) {
+      # Subset the survey design for the current race and age group
+      design_subset <- nhanes_srvyr_design %>%
+        filter(RIDRETH3 == race & age_group == age_group)
+      if (nrow(design_subset$variables) > 0) {
+        quantiles <- calculate_weighted_percentiles(design_subset, cbc_var)
+        result <- quantiles %>%
+          mutate(Race = race, AgeGroup = age_group, Parameter = cbc_var)
+        results <- bind_rows(results, result)
+      }
+    }
+  }
+}
+
+# Decode race for readability
+results <- results %>%
+  mutate(
+    Race = recode(Race,
+                  `1` = "Mexican American",
+                  `2` = "Other Hispanic",
+                  `3` = "Non-Hispanic White",
+                  `4` = "Non-Hispanic Black",
+                  `6` = "Non-Hispanic Asian")
+  )
+
+# Ensure the column names match
+colnames(results) <- c("Lower_2.5th_Percentile", "50th_Percentile_Median", "Upper_97.5th_Percentile", "Race", "Age_Group", "Parameter")
+
+# Convert the 50th_Percentile_Median to be in percentage format
+results <- results %>%
+  mutate(
+    Lower_2.5th_Percentile = round(Lower_2.5th_Percentile, 2),
+    `50th_Percentile_Median` = round(`50th_Percentile_Median`, 2),
+    Upper_97.5th_Percentile = round(Upper_97.5th_Percentile, 2)
+  )
+
+# Save the results to a CSV file
+write.csv(results, "/Users/seanchickery/Library/Mobile Documents/com~apple~CloudDocs/R NHANES CBC 2015 thru 2018/reference_intervals_results.csv", row.names = FALSE)
+
+
+
+
 
